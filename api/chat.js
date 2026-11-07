@@ -57,10 +57,6 @@ export default async function handler(req, res) {
 
           generationConfig: {
             maxOutputTokens: 350,
-            temperature: 0.8,
-            thinkingConfig: {
-              thinkingBudget: 0,
-            },
           },
         }),
       }
@@ -68,7 +64,6 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Check whether Gemini returned an API error.
     if (!response.ok) {
       console.error(
         "Gemini API error:",
@@ -81,7 +76,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Extract Gemini's generated answer.
     const answer = data.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
       .join("")
