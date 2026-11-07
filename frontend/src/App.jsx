@@ -222,10 +222,9 @@ export default function App() {
       if (voice) u.voice = voice;
       u.lang = voice?.lang || "en-IN";
 
-      // Offline female voices sound cleanest at their natural settings.
-      const natural = voice?.localService && femaleVoiceRef.current;
-      u.rate = natural ? 1 : 0.98;
-      u.pitch = natural ? 1 : femaleVoiceRef.current ? 1.02 : 1.2;
+      // Slower and slightly higher for a softer, gentler sound.
+      u.rate = 0.93;
+      u.pitch = 1.1;
       u.volume = 1;
 
       if (i === 0) {
