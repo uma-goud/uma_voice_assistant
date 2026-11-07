@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from "react";
 // true = sample replies, false = calls the real backend
 const DEMO_MODE = false;
 
+// true = use offline voices (instant, never regenerates, slightly less natural)
+// false = allow online voices (more natural, but they stream over the internet)
+const PREFER_LOCAL = false;
+
 const QUESTIONS = [
   "What should we know about your life story?",
   "What's your #1 superpower?",
@@ -20,15 +24,16 @@ const FEMALE_RE =
 const isMale = (v) => MALE_RE.test(v.name);
 const isFemale = (v) => FEMALE_RE.test(v.name) && !isMale(v);
 
-// Groups sentences into larger chunks so there are fewer gaps between them.
-function chunkText(text, max = 220) {
+// First chunk is short so speech starts fast; later chunks are larger.
+function chunkText(text, firstMax = 110, max = 200) {
   const sentences =
     text.match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) || [text];
   const chunks = [];
   let current = "";
 
   for (const s of sentences) {
-    if (current && (current + " " + s).length > max) {
+    const limit = chunks.length === 0 ? firstMax : max;
+    if (current && (current + " " + s).length > limit) {
       chunks.push(current);
       current = s;
     } else {
@@ -106,8 +111,11 @@ export default function App() {
     const synth = window.speechSynthesis;
 
     function loadVoices() {
-      const voices = synth.getVoices();
-      if (!voices.length) return;
+      const all = synth.getVoices();
+      if (!all.length) return;
+
+      const local = all.filter((v) => v.localService);
+      const voices = PREFER_LOCAL && local.length ? local : all;
 
       const english = voices.filter((v) =>
         v.lang.toLowerCase().startsWith("en")
@@ -134,6 +142,7 @@ export default function App() {
           "Selected speech voice:",
           selected.name,
           selected.lang,
+          selected.localService ? "(offline)" : "(online)",
           femaleVoiceRef.current ? "(female)" : "(unknown gender)"
         );
       } else {
@@ -189,8 +198,8 @@ export default function App() {
     setStatus("");
   }
 
-  // Speak the answer in one piece. Only Google voices are split into
-  // larger chunks, because they can stop after about 15 seconds.
+  // Speak in small chunks: a short first chunk so speech starts quickly,
+  // then larger chunks so the gaps between them stay small.
   function speak(reply) {
     if (
       !("speechSynthesis" in window) ||
@@ -204,9 +213,7 @@ export default function App() {
 
     const synth = window.speechSynthesis;
     const voice = voiceRef.current;
-
-    const needsChunks = voice && /google/i.test(voice.name);
-    const parts = needsChunks ? chunkText(reply, 220) : [reply];
+    const parts = chunkText(reply);
 
     parts.forEach((part, i) => {
       const u = new SpeechSynthesisUtterance(part);
