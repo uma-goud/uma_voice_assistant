@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from "react";
 // true = sample replies, false = calls the real backend
 const DEMO_MODE = false;
 
-// true = use offline voices (instant, never regenerates, slightly less natural)
+// true = use offline voices (instant, smooth, never regenerates)
 // false = allow online voices (more natural, but they stream over the internet)
-const PREFER_LOCAL = false;
+const PREFER_LOCAL = true;
 
 const QUESTIONS = [
   "What should we know about your life story?",
@@ -25,6 +25,7 @@ const isMale = (v) => MALE_RE.test(v.name);
 const isFemale = (v) => FEMALE_RE.test(v.name) && !isMale(v);
 
 // First chunk is short so speech starts fast; later chunks are larger.
+// Only used for online voices.
 function chunkText(text, firstMax = 110, max = 200) {
   const sentences =
     text.match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) || [text];
@@ -198,8 +199,8 @@ export default function App() {
     setStatus("");
   }
 
-  // Speak in small chunks: a short first chunk so speech starts quickly,
-  // then larger chunks so the gaps between them stay small.
+  // Offline voices play the whole answer in one piece (smooth).
+  // Online voices are split into chunks so long answers are not cut off.
   function speak(reply) {
     if (
       !("speechSynthesis" in window) ||
@@ -213,7 +214,7 @@ export default function App() {
 
     const synth = window.speechSynthesis;
     const voice = voiceRef.current;
-    const parts = chunkText(reply);
+    const parts = voice?.localService ? [reply] : chunkText(reply);
 
     parts.forEach((part, i) => {
       const u = new SpeechSynthesisUtterance(part);
@@ -221,9 +222,10 @@ export default function App() {
       if (voice) u.voice = voice;
       u.lang = voice?.lang || "en-IN";
 
-      u.rate = 0.98;
-      // If no confirmed female voice exists, raise the pitch a little.
-      u.pitch = femaleVoiceRef.current ? 1.02 : 1.2;
+      // Offline female voices sound cleanest at their natural settings.
+      const natural = voice?.localService && femaleVoiceRef.current;
+      u.rate = natural ? 1 : 0.98;
+      u.pitch = natural ? 1 : femaleVoiceRef.current ? 1.02 : 1.2;
       u.volume = 1;
 
       if (i === 0) {
