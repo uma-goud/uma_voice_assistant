@@ -4,8 +4,11 @@ import path from "path";
 const read = (file) =>
   fs.readFileSync(path.join(process.cwd(), "backend", file), "utf8");
 
-const SYSTEM =
-  read("system_prompt.md") + "\n\nKNOWLEDGE BASE:\n" + read("knowledge_base.md");
+
+ const SYSTEM =
+  read("prompts/system_prompt.md") +
+  "\n\nKNOWLEDGE BASE:\n" +
+  read("knowledge/knowledge_base.md");
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
