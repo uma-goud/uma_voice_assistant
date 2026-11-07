@@ -81,46 +81,71 @@ export default function App() {
     });
   }, [messages, thinking]);
 
-  // Select the best available English voice.
+  // Find the best available English voice.
   useEffect(() => {
+    if (!("speechSynthesis" in window)) {
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+
     function loadVoices() {
-      const voices = window.speechSynthesis.getVoices();
+      const voices = synth.getVoices();
+
+      if (!voices.length) return;
+
+      // Display available voices for debugging.
+      console.table(
+        voices.map((voice) => ({
+          name: voice.name,
+          language: voice.lang,
+          local: voice.localService,
+          default: voice.default,
+        }))
+      );
+
+      const englishVoices = voices.filter((voice) =>
+        voice.lang.toLowerCase().startsWith("en")
+      );
+
+      const indianVoices = englishVoices.filter((voice) =>
+        voice.lang.toLowerCase().replace("_", "-").startsWith("en-in")
+      );
+
+      const preferredIndianVoice = indianVoices.find((voice) =>
+        /natural|neural|google|microsoft.*online/i.test(voice.name)
+      );
+
+      const preferredEnglishVoice = englishVoices.find((voice) =>
+        /natural|neural|google|aria/i.test(voice.name)
+      );
 
       const selected =
-        voices.find(
-          (v) => v.lang.toLowerCase() === "en-in"
-        ) ||
-        voices.find(
-          (v) =>
-            /natural|neural|google|aria/i.test(v.name) &&
-            v.lang.toLowerCase().startsWith("en")
-        ) ||
-        voices.find(
-          (v) => v.lang.toLowerCase().startsWith("en")
-        );
+        preferredIndianVoice ||
+        indianVoices[0] ||
+        preferredEnglishVoice ||
+        englishVoices[0] ||
+        null;
 
       if (selected) {
         voiceRef.current = selected;
+
         console.log(
-          "Selected voice:",
+          "Selected speech voice:",
           selected.name,
           selected.lang
         );
+      } else {
+        console.log("No English voice found. Using browser default.");
       }
     }
 
     loadVoices();
 
-    window.speechSynthesis.addEventListener(
-      "voiceschanged",
-      loadVoices
-    );
+    synth.addEventListener("voiceschanged", loadVoices);
 
     return () => {
-      window.speechSynthesis.removeEventListener(
-        "voiceschanged",
-        loadVoices
-      );
+      synth.removeEventListener("voiceschanged", loadVoices);
     };
   }, []);
 
@@ -169,7 +194,10 @@ export default function App() {
   }, []);
 
   function stopSpeaking() {
-    window.speechSynthesis.cancel();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     setSpeaking(false);
     setStatus("");
   }
@@ -177,7 +205,12 @@ export default function App() {
   async function ask(question) {
     if (!question?.trim()) return;
 
-    window.speechSynthesis.cancel();
+    const questionStart = performance.now();
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     setSpeaking(false);
 
     historyRef.current = [
@@ -217,11 +250,12 @@ export default function App() {
 
         const data = await res.json();
 
-        const responseTime =
-          Math.round(performance.now() - requestStart);
+        const responseTime = Math.round(
+          performance.now() - requestStart
+        );
 
         console.log(
-          "Gemini response time:",
+          "API response time:",
           responseTime,
           "ms"
         );
@@ -253,7 +287,18 @@ export default function App() {
       { role: "assistant", text: reply },
     ]);
 
-    // Configure a more natural speaking voice.
+    // Check browser speech support.
+    if (
+      !("speechSynthesis" in window) ||
+      !("SpeechSynthesisUtterance" in window)
+    ) {
+      setStatus(
+        "Your browser does not support voice playback. You can read the response above."
+      );
+      return;
+    }
+
+    // Configure natural speech delivery.
     const utter = new SpeechSynthesisUtterance(reply);
 
     if (voiceRef.current) {
@@ -261,11 +306,35 @@ export default function App() {
     }
 
     utter.lang = "en-IN";
-    utter.rate = 0.96;
-    utter.pitch = 1.05;
+
+    // Natural speaking settings.
+    utter.rate = 0.98;
+    utter.pitch = 1.02;
     utter.volume = 1;
 
+    const speechQueuedAt = performance.now();
+
     utter.onstart = () => {
+      const speechStartupTime = Math.round(
+        performance.now() - speechQueuedAt
+      );
+
+      const totalTime = Math.round(
+        performance.now() - questionStart
+      );
+
+      console.log(
+        "Speech startup time:",
+        speechStartupTime,
+        "ms"
+      );
+
+      console.log(
+        "Total question-to-speech time:",
+        totalTime,
+        "ms"
+      );
+
       setSpeaking(true);
       setStatus("Speaking...");
     };
@@ -275,7 +344,9 @@ export default function App() {
       setStatus("");
     };
 
-    utter.onerror = () => {
+    utter.onerror = (event) => {
+      console.error("Speech playback error:", event.error);
+
       setSpeaking(false);
       setStatus("");
     };
@@ -284,7 +355,10 @@ export default function App() {
   }
 
   function toggleMic() {
-    window.speechSynthesis.cancel();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     setSpeaking(false);
 
     if (!recRef.current) return;
